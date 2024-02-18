@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Advanced Game</title>
+  <style>
+    /* CSS styles go here */
+    #game-container {
+      width: 800px;
+      height: 600px;
+      background-color: #000000;
+      position: relative;
+    }
+
+    .game-object {
+      position: absolute;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <!-- Game objects and elements go here -->
+    <span id="score" style="color: #ffffff; font-size: 24px; position: absolute; top: 10px; left: 10px;"></span>
+    <span id="level" style="color: #ffffff; font-size: 24px; position: absolute; top: 10px; right: 10px;"></span>
+  </div>
+
+  <script>
+    // JavaScript code goes here
+
+    // Define game variables
+    var gameContainer = document.getElementById('game-container');
+    var gameObjects = [];
+    var player;
+    var keys = {};
+
+    // Game object constructor
+    function GameObject(x, y, width, height, color) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+      this.color = color;
+
+      this.element = document.createElement('div');
+      this.element.className = 'game-object';
+      this.element.style.left = this.x + 'px';
+      this.element.style.top = this.y + 'px';
+      this.element.style.width = this.width + 'px';
+      this.element.style.height = this.height + 'px';
+      this.element.style.backgroundColor = this.color;
+
+      gameContainer.appendChild(this.element);
+      gameObjects.push(this);
+    }
+
+    // Player object constructor
+    function Player(x, y) {
+      GameObject.call(this, x, y, 50, 50, '#ff0000');
+
+      this.speed = 5;
+      this.bullets = [];
+      this.score = 0;
+      this.level = 1;
+
+      // Update player position based on key inputs
+      this.updatePosition = function() {
+        if (keys.ArrowUp) {
+          this.y -= this.speed;
+        }
+        if (keys.ArrowDown) {
+          this.y += this.speed;
+        }
+        if (keys.ArrowLeft) {
+          this.x -= this.speed;
+        }
+        if (keys.ArrowRight) {
+          this.x += this.speed;
+        }
+
+        // Keep player within the game container
+        if (this.x < 0) {
+          this.x = 0;
+        }
+        if (this.x + this.width > gameContainer.offsetWidth) {
+          this.x = gameContainer.offsetWidth - this.width;
+        }
+        if (this.y < 0) {
+          this.y = 0;
+        }
+        if (this.y + this.height > gameContainer.offsetHeight) {
+          this.y = gameContainer.offsetHeight - this.height;
+        }
+      };
+
+      // Fire a bullet
+      this.fireBullet = function() {
+        var bullet = new GameObject(
+          this.x + this.width,
+          this.y + this.height / 2 - 2,
+          10,
+          4,
+          '#ffffff'
+        );
+        this.bullets.push(bullet);
+      };
+
+      // Update bullet positions and remove off-screen bullets
+      this.updateBullets = function() {
+        for (var i = this.bullets.length - 1; i >= 0; i--) {
+          var bullet = this.bullets[i];
+          bullet.x += 10;
+
+          // Remove bullets that go off-screen
+          if (bullet.x > gameContainer.offsetWidth) {
+            gameContainer.removeChild(bullet.element);
+            this.bullets.splice(i, 1);
+          }
+        }
+      };
+    }
+    Player.prototype = Object.create(GameObject.prototype);
+    Player.prototype.constructor = Player;
+
+    // Enemy object constructor
+    function Enemy(x, y, width, height, color, speed) {
+      GameObject.call(this, x, y, width, height, color);
+
+      this.speed = speed;
+
+      // Update enemy position
+      this.updatePosition = function() {
+        this.x -= this.speed;
+
+        // Remove enemy when it goes off-screen
+        if (this.x + this.width < 0) {
+          gameContainer.removeChild(this.element);
+          gameObjects.splice(gameObjects.indexOf(this), 1);
+        }
+      };
+    }
+    Enemy.prototype = Object.create(GameObject.prototype);
+    Enemy.prototype.constructor = Enemy;
+
+    // Power-up object constructor
+    function PowerUp(x, y, width, height, color, effect) {
+      GameObject.call(this, x, y, width, height, color);
+
+      this.effect = effect;
+
+      // Update power-up position
+      this.updatePosition = function() {
+        this.x -= 3;
+
+        // Wrap around when power-up goes off-screen
+        if (this.x + this.width < 0) {
+          gameContainer.removeChild(this.element);
+          gameObjects.splice(gameObjects.indexOf(this), 1);
+        }
+      };
+    }
+    PowerUp.prototype = Object.create(GameObject.prototype);
+    PowerUp.prototype.constructor = PowerUp;
+
+    // Keyboard event listeners for player movement and firing
+    window.addEventListener('keydown', function(event) {
+      keys[event.code] = true;
+
+      // Fire a bullet on Spacebar press
+      if (event.code === 'Space') {
+        player.fireBullet();
+      }
+    });
+    window.addEventListener('keyup', function(event) {
+      keys[event.code] = false;
+    });
+
+    // Example animation loop
+    function animate() {
+      // Update player position and bullets
+      player.updatePosition();
+      player.updateBullets();
+
+      // Update game objects' positions and handle collisions
+      for (var i = gameObjects.length - 1; i >= 0; i--) {
+        var obj = gameObjects[i];
+
+        // Update enemy position
+        if (obj instanceof Enemy) {
+          obj.updatePosition();
+
+          // Check for collision between player's bullets and enemy
+          for (var j = player.bullets.length - 1; j >= 0; j--) {
+            var bullet = player.bullets[j];
+            if (checkCollision(bullet, obj)) {
+              // Handle bullet-enemy collision
+              gameContainer.removeChild(bullet.element);
+              player.bullets.splice(j, 1);
+              gameContainer.removeChild(obj.element);
+              gameObjects.splice(i, 1);
+              player.score += 10;
+
+              // Spawn power-up
+              if (Math.random() < 0.2) {
+                spawnPowerUp(obj.x, obj.y);
+              }
+
+              // Increase score and level
+              if (player.score % 100 === 0) {
+                player.level++;
+                increaseDifficulty();
+              }
+            }
+          }
+
+          // Check for collision between player and enemy
+          if (checkCollision(player, obj)) {
+            // Handle player-enemy collision
+            gameContainer.removeChild(obj.element);
+            gameObjects.splice(i, 1);
+            player.score -= 20;
+            player.level = Math.max(player.level - 1, 1);
+            decreaseDifficulty();
+          }
+        }
+
+        // Update power-up position
+        if (obj instanceof PowerUp) {
+          obj.updatePosition();
+
+          // Check for collision between player and power-up
+          if (checkCollision(player, obj)) {
+            // Handle player-power-up collision
+            gameContainer.removeChild(obj.element);
+            gameObjects.splice(i, 1);
+            applyPowerUpEffect(obj.effect);
+          }
+        }
+
+        // Update game object's position on the screen
+        obj.element.style.left = obj.x + 'px';
+        obj.element.style.top = obj.y + 'px';
+      }
+
+      // Update score and level display
+      updateScoreAndLevel();
+
+      requestAnimationFrame(animate);
+    }
+
+    // Utility function for collision detection between two objects
+    function checkCollision(obj1, obj2) {
+      return (
+        obj1.x < obj2.x + obj2.width &&
+        obj1.x + obj1.width > obj2.x &&
+        obj1.y < obj2.y + obj2.height &&
+        obj1.y + obj1.height > obj2.y
+      );
+    }
+
+    // Utility function to spawn enemies
+    function spawnEnemy() {
+      var enemyWidth = Math.random() * (80 - 30) + 30;
+      var enemyHeight = Math.random() * (80 - 30) + 30;
+      var enemyColor = '#00ff00';
+      var enemySpeed = player.level * 0.5 + 3;
+
+      var enemyY = Math.floor(Math.random() * (gameContainer.offsetHeight - enemyHeight));
+      var enemyX = gameContainer.offsetWidth;
+
+      var enemy = new Enemy(enemyX, enemyY, enemyWidth, enemyHeight, enemyColor, enemySpeed);
+    }
+
+    // Utility function to spawn power-ups
+    function spawnPowerUp(x, y) {
+      var powerUpWidth = 30;
+      var powerUpHeight = 30;
+      var powerUpColor = '#ffff00';
+      var powerUpEffect = 'increaseSpeed';
+
+      var powerUp = new PowerUp(x, y, powerUpWidth, powerUpHeight, powerUpColor, powerUpEffect);
+    }
+
+    // Utility function to apply power-up effect
+    function applyPowerUpEffect(effect) {
+      if (effect === 'increaseSpeed') {
+        player.speed += 2;
+      }
+    }
+
+    // Utility function to increase game difficulty
+    function increaseDifficulty() {
+      clearInterval(enemySpawnInterval);
+      enemySpawnInterval = setInterval(spawnEnemy, 1500 - player.level * 100);
+    }
+
+    // Utility function to decrease game difficulty
+    function decreaseDifficulty() {
+      clearInterval(enemySpawnInterval);
+      enemySpawnInterval = setInterval(spawnEnemy, 1500 - player.level * 100);
+    }
+
+    // Utility function to update score and level display
+    function updateScoreAndLevel() {
+      var scoreElement = document.getElementById('score');
+      var levelElement = document.getElementById('level');
+      scoreElement.textContent = 'Score: ' + player.score;
+      levelElement.textContent = 'Level: ' + player.level;
+    }
+
+    // Start the game
+    player = new Player(100, 100);
+    var enemySpawnInterval = setInterval(spawnEnemy, 1500);
+    updateScoreAndLevel();
+    animate();
+  </script>
+</body>
+</html>
